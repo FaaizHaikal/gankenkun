@@ -28,12 +28,7 @@ namespace gankenkun
 {
 
 Kinematics::Kinematics()
-: ankle_length(0.0),
-  calf_length(0.0),
-  knee_length(0.0),
-  thigh_length(0.0),
-  x_offset(0.0),
-  y_offset(0.0)
+: ankle_length(0.0), calf_length(0.0), thigh_length(0.0), x_offset(0.0), y_offset(0.0)
 {
   reset_angles();
 }
@@ -60,7 +55,6 @@ void Kinematics::set_config(const nlohmann::json & kinematic_data)
 
     valid_section &= jitsuyo::assign_val(leg_section, "ankle_length", ankle_length);
     valid_section &= jitsuyo::assign_val(leg_section, "calf_length", calf_length);
-    valid_section &= jitsuyo::assign_val(leg_section, "knee_length", knee_length);
     valid_section &= jitsuyo::assign_val(leg_section, "thigh_length", thigh_length);
 
     if (!valid_section) {
@@ -93,7 +87,7 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
 
   double left_x = left_foot.position.x - x_offset;
   double left_y = left_foot.position.y - y_offset;
-  double left_z = ankle_length + calf_length + knee_length + thigh_length - left_foot.position.z;
+  double left_z = ankle_length + calf_length + thigh_length - left_foot.position.z;
 
   double left_x2 = left_x * left_foot.yaw.cos() + left_y * left_foot.yaw.sin();
   double left_y2 = -left_x * left_foot.yaw.sin() + left_y * left_foot.yaw.cos();
@@ -103,7 +97,7 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
   keisan::Angle<double> hip_roll = keisan::signed_arctan(left_y2, left_z2);
 
   double left2 = left_y2 * left_y2 + left_z2 * left_z2;
-  double left_z3 = std::sqrt(std::max(0.0, left2 - left_x2 * left_x2)) - knee_length;
+  double left_z3 = std::sqrt(std::max(0.0, left2 - left_x2 * left_x2));
 
   keisan::Angle<double> pitch = keisan::signed_arctan(left_x2, left_z3);
   double length = std::hypot(left_x2, left_z3);
@@ -119,18 +113,16 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
   angles[JointId::LEFT_HIP_YAW] = left_foot.yaw;
   angles[JointId::LEFT_HIP_ROLL] = hip_roll;
   angles[JointId::LEFT_HIP_PITCH] = -hip_pitch;
-  angles[JointId::LEFT_UPPER_KNEE] = hip_pitch;
-  angles[JointId::LEFT_LOWER_KNEE] = -knee_pitch;
+  angles[JointId::LEFT_KNEE] = -knee_pitch;
   angles[JointId::LEFT_ANKLE_PITCH] = 0.0_deg;   // TODO: Add offset from param left_foot pitch
   angles[JointId::LEFT_ANKLE_ROLL] = -hip_roll;  // TODO: Add offset from param left_foot roll
 
-  // std::cout << "Left Hip Yaw: " << angles[JointId::LEFT_HIP_YAW].degree() << std::endl;
-  // std::cout << "Left Hip Roll: " << angles[JointId::LEFT_HIP_ROLL].degree() << std::endl;
-  // std::cout << "Left Hip Pitch: " << angles[JointId::LEFT_HIP_PITCH].degree() << std::endl;
-  // std::cout << "Left Upper Knee: " << angles[JointId::LEFT_UPPER_KNEE].degree() << std::endl;
-  // std::cout << "Left Lower Knee: " << angles[JointId::LEFT_LOWER_KNEE].degree() << std::endl;
-  // std::cout << "Left Ankle Pitch: " << angles[JointId::LEFT_ANKLE_PITCH].degree() << std::endl;
-  // std::cout << "Left Ankle Roll: " << angles[JointId::LEFT_ANKLE_ROLL].degree() << std::endl;
+  std::cout << "Left Hip Yaw: " << angles[JointId::LEFT_HIP_YAW].degree() << std::endl;
+  std::cout << "Left Hip Roll: " << angles[JointId::LEFT_HIP_ROLL].degree() << std::endl;
+  std::cout << "Left Hip Pitch: " << angles[JointId::LEFT_HIP_PITCH].degree() << std::endl;
+  std::cout << "Left Knee: " << angles[JointId::LEFT_KNEE].degree() << std::endl;
+  std::cout << "Left Ankle Pitch: " << angles[JointId::LEFT_ANKLE_PITCH].degree() << std::endl;
+  std::cout << "Left Ankle Roll: " << angles[JointId::LEFT_ANKLE_ROLL].degree() << std::endl;
 
   double right_x = right_foot.position.x - x_offset;
   double right_y = right_foot.position.y + y_offset;
@@ -144,7 +136,7 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
   hip_roll = keisan::signed_arctan(right_y2, right_z2);
 
   double right2 = right_y2 * right_y2 + right_z2 * right_z2;
-  double right_z3 = std::sqrt(std::max(0.0, right2 - right_x2 * right_x2)) - knee_length;
+  double right_z3 = std::sqrt(std::max(0.0, right2 - right_x2 * right_x2));
 
   pitch = keisan::signed_arctan(right_x2, right_z3);
   length = std::hypot(right_x2, right_z3);
@@ -159,18 +151,16 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
   angles[JointId::RIGHT_HIP_YAW] = right_foot.yaw;
   angles[JointId::RIGHT_HIP_ROLL] = hip_roll;
   angles[JointId::RIGHT_HIP_PITCH] = hip_pitch;
-  angles[JointId::RIGHT_UPPER_KNEE] = -hip_pitch;
-  angles[JointId::RIGHT_LOWER_KNEE] = -knee_pitch;
+  angles[JointId::RIGHT_KNEE] = -knee_pitch;
   angles[JointId::RIGHT_ANKLE_PITCH] = 0.0_deg;   // TODO: Add offset from param right_foot pitch
   angles[JointId::RIGHT_ANKLE_ROLL] = -hip_roll;  // TODO: Add offset from param right_foot roll
 
-  // std::cout << "Right Hip Yaw: " << angles[JointId::RIGHT_HIP_YAW].degree() << std::endl;
-  // std::cout << "Right Hip Roll: " << angles[JointId::RIGHT_HIP_ROLL].degree() << std::endl;
-  // std::cout << "Right Hip Pitch: " << angles[JointId::RIGHT_HIP_PITCH].degree() << std::endl;
-  // std::cout << "Right Upper Knee: " << angles[JointId::RIGHT_UPPER_KNEE].degree() << std::endl;
-  // std::cout << "Right Lower Knee: " << angles[JointId::RIGHT_LOWER_KNEE].degree() << std::endl;
-  // std::cout << "Right Ankle Pitch: " << angles[JointId::RIGHT_ANKLE_PITCH].degree() << std::endl;
-  // std::cout << "Right Ankle Roll: " << angles[JointId::RIGHT_ANKLE_ROLL].degree() << std::endl;
+  std::cout << "Right Hip Yaw: " << angles[JointId::RIGHT_HIP_YAW].degree() << std::endl;
+  std::cout << "Right Hip Roll: " << angles[JointId::RIGHT_HIP_ROLL].degree() << std::endl;
+  std::cout << "Right Hip Pitch: " << angles[JointId::RIGHT_HIP_PITCH].degree() << std::endl;
+  std::cout << "Right Knee: " << angles[JointId::RIGHT_KNEE].degree() << std::endl;
+  std::cout << "Right Ankle Pitch: " << angles[JointId::RIGHT_ANKLE_PITCH].degree() << std::endl;
+  std::cout << "Right Ankle Roll: " << angles[JointId::RIGHT_ANKLE_ROLL].degree() << std::endl;
 }
 
 }  // namespace gankenkun
