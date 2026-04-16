@@ -43,10 +43,6 @@ public:
 
   void set_parameters(double z, double dt, double period);
 
-  double dt;
-  double period;
-  double z;
-
   struct COMTrajectory
   {
     keisan::Point2 position;
@@ -58,6 +54,10 @@ public:
   const std::deque<COMTrajectory> & get_com_trajectory() const { return com_trajectory; }
 
 private:
+  double dt;
+  double period;
+  double z;
+
   // Discrete-time system matrices
   keisan::Matrix<3, 3> A_d;
   keisan::Matrix<3, 1> B_d;

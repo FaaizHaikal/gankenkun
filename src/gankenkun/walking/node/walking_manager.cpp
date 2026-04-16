@@ -44,6 +44,10 @@ WalkingManager::WalkingManager()
   com_height(0.0),
   foot_height(0.0),
   feet_lateral(0.0),
+  forward_lean(0.0_deg),
+  forward_lean_ratio(0.0),
+  backward_lean(0.0_deg),
+  backward_lean_ratio(0.0),
   foot_offset(keisan::Point3(0.0, 0.0, 0.0)),
   step_y_offset(0.0),
   odometry_offset(keisan::Point2(0.0, 0.0)),
@@ -103,7 +107,6 @@ void WalkingManager::set_config(
     valid_section &= jitsuyo::assign_val(posture_section, "com_height", com_height);
     valid_section &= jitsuyo::assign_val(posture_section, "foot_height", foot_height);
     valid_section &= jitsuyo::assign_val(posture_section, "feet_lateral", feet_lateral);
-    valid_section &= jitsuyo::assign_val(posture_section, "body_pitch", body_pitch);
     valid_section &= jitsuyo::assign_val(posture_section, "left_shoulder_roll", left_shoulder_roll);
     valid_section &=
       jitsuyo::assign_val(posture_section, "left_shoulder_pitch", left_shoulder_pitch);
@@ -116,6 +119,29 @@ void WalkingManager::set_config(
 
     if (!valid_section) {
       std::cout << "Error found at section `posture`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
+  }
+
+  nlohmann::json balance_section;
+  if (jitsuyo::assign_val(walking_data, "balance", balance_section)) {
+    bool valid_section = true;
+    double forward_lean_degree;
+    double backward_lean_degree;
+
+    valid_section &= jitsuyo::assign_val(balance_section, "forward_lean", forward_lean_degree);
+    valid_section &= jitsuyo::assign_val(balance_section, "forward_lean_ratio", forward_lean_ratio);
+    valid_section &= jitsuyo::assign_val(balance_section, "backward_lean", backward_lean_degree);
+    valid_section &=
+      jitsuyo::assign_val(balance_section, "backward_lean_ratio", backward_lean_ratio);
+
+    forward_lean = keisan::make_degree(forward_lean_degree);
+    backward_lean = keisan::make_degree(backward_lean_degree);
+
+    if (!valid_section) {
+      std::cout << "Error found at section `balance`" << std::endl;
       valid_config = false;
     }
   } else {
@@ -196,6 +222,24 @@ void WalkingManager::remove_steps()
 
 bool WalkingManager::replan() { return lipm.get_com_trajectory().empty(); }
 
+keisan::Angle<double> WalkingManager::get_balance_body_pitch() const
+{
+  if (foot_step_planner.foot_steps.size() < 2 || max_stride.x <= 0.0) {
+    return forward_lean;
+  }
+
+  double stride_x =
+    foot_step_planner.foot_steps[1].position.x - foot_step_planner.foot_steps[0].position.x;
+  double normalized_stride_x = keisan::clamp(stride_x / max_stride.x, -1.0, 1.0);
+
+  if (normalized_stride_x >= 0.0) {
+    return forward_lean + keisan::make_degree(forward_lean_ratio * normalized_stride_x);
+  }
+
+  return forward_lean -
+         (backward_lean + keisan::make_degree(backward_lean_ratio * std::abs(normalized_stride_x)));
+}
+
 void WalkingManager::set_goal(
   const keisan::Point2 & goal_position, const keisan::Angle<double> & goal_orientation)
 {
@@ -263,6 +307,7 @@ void WalkingManager::update_time()
 void WalkingManager::update_joints()
 {
   auto com = lipm.pop_front();
+  auto body_pitch = get_balance_body_pitch();
 
   double step_period = round(
     (foot_step_planner.foot_steps[1].time - foot_step_planner.foot_steps[0].time) / time_step);
@@ -343,6 +388,8 @@ void WalkingManager::update_joints()
     angles[JointId::RIGHT_SHOULDER_PITCH] = right_shoulder_pitch;
     angles[JointId::RIGHT_SHOULDER_ROLL] = right_shoulder_roll;
     angles[JointId::RIGHT_ELBOW] = right_elbow;
+    angles[JointId::LEFT_HIP_PITCH] -= body_pitch;
+    angles[JointId::RIGHT_HIP_PITCH] += body_pitch;
 
     for (auto & joint : joints) {
       uint8_t id = joint.get_id();

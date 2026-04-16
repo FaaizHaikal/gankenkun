@@ -60,6 +60,8 @@ public:
   bool is_running();
 
 private:
+  keisan::Angle<double> get_balance_body_pitch() const;
+
   Kinematics kinematics;
   LIPM lipm;
   FootStepPlanner foot_step_planner;
@@ -81,7 +83,10 @@ private:
   double com_height;
   double foot_height;
   double feet_lateral;
-  keisan::Angle<double> body_pitch;
+  keisan::Angle<double> forward_lean;
+  double forward_lean_ratio;
+  keisan::Angle<double> backward_lean;
+  double backward_lean_ratio;
   keisan::Angle<double> left_shoulder_roll;
   keisan::Angle<double> left_shoulder_pitch;
   keisan::Angle<double> left_elbow;

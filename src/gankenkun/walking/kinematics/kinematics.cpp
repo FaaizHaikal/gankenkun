@@ -79,6 +79,10 @@ void Kinematics::set_config(const nlohmann::json & kinematic_data)
   } else {
     valid_config = false;
   }
+
+  if (!valid_config) {
+    throw std::runtime_error("Failed to load config file `kinematic.json`");
+  }
 }
 
 void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & right_foot)
@@ -119,7 +123,7 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
     keisan::signed_arctan(px, pz) -
     keisan::make_radian(std::acos(keisan::clamp(cos_hip, -1.0, 1.0)));
 
-  keisan::Angle<double> ankle_pitch = (hip_pitch + knee_pitch);
+  keisan::Angle<double> ankle_pitch = hip_pitch + knee_pitch;
 
   angles[JointId::LEFT_HIP_YAW] = left_foot.yaw;
   angles[JointId::LEFT_HIP_ROLL] = hip_roll;
@@ -154,7 +158,7 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
   hip_pitch = keisan::signed_arctan(px, pz) -
               keisan::make_radian(std::acos(keisan::clamp(cos_hip, -1.0, 1.0)));
 
-  ankle_pitch = (hip_pitch + knee_pitch);
+  ankle_pitch = hip_pitch + knee_pitch;
 
   angles[JointId::RIGHT_HIP_YAW] = right_foot.yaw;
   angles[JointId::RIGHT_HIP_ROLL] = hip_roll;
