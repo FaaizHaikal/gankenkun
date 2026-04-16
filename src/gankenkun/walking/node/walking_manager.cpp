@@ -103,6 +103,16 @@ void WalkingManager::set_config(
     valid_section &= jitsuyo::assign_val(posture_section, "com_height", com_height);
     valid_section &= jitsuyo::assign_val(posture_section, "foot_height", foot_height);
     valid_section &= jitsuyo::assign_val(posture_section, "feet_lateral", feet_lateral);
+    valid_section &= jitsuyo::assign_val(posture_section, "body_pitch", body_pitch);
+    valid_section &= jitsuyo::assign_val(posture_section, "left_shoulder_roll", left_shoulder_roll);
+    valid_section &=
+      jitsuyo::assign_val(posture_section, "left_shoulder_pitch", left_shoulder_pitch);
+    valid_section &= jitsuyo::assign_val(posture_section, "left_elbow", left_elbow);
+    valid_section &=
+      jitsuyo::assign_val(posture_section, "right_shoulder_roll", right_shoulder_roll);
+    valid_section &=
+      jitsuyo::assign_val(posture_section, "right_shoulder_pitch", right_shoulder_pitch);
+    valid_section &= jitsuyo::assign_val(posture_section, "right_elbow", right_elbow);
 
     if (!valid_section) {
       std::cout << "Error found at section `posture`" << std::endl;
@@ -324,6 +334,15 @@ void WalkingManager::update_joints()
     kinematics.solve_inverse_kinematics(left_foot, right_foot);
 
     auto angles = kinematics.get_angles();
+
+    // Fill arm angles
+    using tachimawari::joint::JointId;
+    angles[JointId::LEFT_SHOULDER_PITCH] = left_shoulder_pitch;
+    angles[JointId::LEFT_SHOULDER_ROLL] = left_shoulder_roll;
+    angles[JointId::LEFT_ELBOW] = left_elbow;
+    angles[JointId::RIGHT_SHOULDER_PITCH] = right_shoulder_pitch;
+    angles[JointId::RIGHT_SHOULDER_ROLL] = right_shoulder_roll;
+    angles[JointId::RIGHT_ELBOW] = right_elbow;
 
     for (auto & joint : joints) {
       uint8_t id = joint.get_id();

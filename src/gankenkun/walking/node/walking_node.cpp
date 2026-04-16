@@ -99,8 +99,8 @@ void WalkingNode::publish_status()
   auto status_msg = WalkingStatus();
 
   status_msg.is_running = walking_manager->is_running();
-  status_msg.odometry.x = walking_manager->get_position().x;
-  status_msg.odometry.y = walking_manager->get_position().y;
+  status_msg.odometry.x = walking_manager->get_position().x * -100.0;
+  status_msg.odometry.y = walking_manager->get_position().y * 100.0;
 
   status_publisher->publish(status_msg);
 }

@@ -119,7 +119,6 @@ void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & r
     keisan::signed_arctan(px, pz) -
     keisan::make_radian(std::acos(keisan::clamp(cos_hip, -1.0, 1.0)));
 
-  // --- FIX 4: ANKLE COMPENSATION ---
   keisan::Angle<double> ankle_pitch = (hip_pitch + knee_pitch);
 
   angles[JointId::LEFT_HIP_YAW] = left_foot.yaw;

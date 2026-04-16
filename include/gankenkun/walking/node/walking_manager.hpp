@@ -81,6 +81,13 @@ private:
   double com_height;
   double foot_height;
   double feet_lateral;
+  keisan::Angle<double> body_pitch;
+  keisan::Angle<double> left_shoulder_roll;
+  keisan::Angle<double> left_shoulder_pitch;
+  keisan::Angle<double> left_elbow;
+  keisan::Angle<double> right_shoulder_roll;
+  keisan::Angle<double> right_shoulder_pitch;
+  keisan::Angle<double> right_elbow;
 
   // Offset parameters
   keisan::Point3 foot_offset;
