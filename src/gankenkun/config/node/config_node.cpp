@@ -55,9 +55,11 @@ ConfigNode::ConfigNode(
       UpdateConfig::Request::SharedPtr request, UpdateConfig::Response::SharedPtr response) {
       nlohmann::ordered_json walking_data;
       nlohmann::ordered_json kinematic_data;
+      nlohmann::ordered_json planner_data;
 
       walking_data = nlohmann::ordered_json::parse(request->json_walking);
       kinematic_data = nlohmann::ordered_json::parse(request->json_kinematic);
+      planner_data = nlohmann::ordered_json::parse(request->json_planner);
 
       if (request->save) {
         if (!jitsuyo::save_config(path, "walking.json", walking_data)) {
@@ -75,9 +77,16 @@ ConfigNode::ConfigNode(
           return;
         }
 
+        if (!jitsuyo::save_config(path, "planner.json", planner_data)) {
+          RCLCPP_ERROR(rclcpp::get_logger("Update config server"), "Failed to save planner config");
+
+          response->ok = false;
+          return;
+        }
+
         RCLCPP_INFO(rclcpp::get_logger("Update config server"), "Config saved");
       } else {
-        this->walking_manager->set_config(walking_data, kinematic_data);
+        this->walking_manager->set_config(walking_data, kinematic_data, planner_data);
 
         RCLCPP_INFO(rclcpp::get_logger("Update config server"), "Config updated");
       }

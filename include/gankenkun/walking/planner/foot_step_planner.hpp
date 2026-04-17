@@ -22,6 +22,8 @@
 #define GANKENKUN__WALKING__PLANNER__FOOT_STEP_PLANNER_HPP_
 
 #include <deque>
+#include <nlohmann/json.hpp>
+#include <openvino/openvino.hpp>
 
 #include "keisan/angle.hpp"
 #include "keisan/geometry/point_2.hpp"
@@ -36,6 +38,12 @@ public:
 
   enum { START = 0, WALKING = 1, STOP = 2 };
 
+  struct Obstacle
+  {
+    keisan::Point2 position;
+    double radius;
+  };
+
   struct FootStep
   {
     double time;
@@ -44,26 +52,64 @@ public:
     int support_foot;
   };
 
-  FootStepPlanner();
+  FootStepPlanner() = default;
 
-  void set_parameters(
-    const keisan::Point2 & max_stride, const keisan::Angle<double> & max_rotation, double period,
-    double width);
+  void initialize(const std::string & model_path);
+  std::vector<float> infer(const std::vector<float> & obs);
+  std::vector<float> build_observation(
+    const keisan::Point2 & target_pos, const keisan::Angle<double> & target_yaw,
+    const keisan::Point2 & support_pos, const keisan::Angle<double> & support_yaw,
+    int next_support);
+  void apply_action(
+    keisan::Point2 & support_pos, keisan::Angle<double> & support_yaw, int next_support,
+    const std::vector<float> & action);
+
+  int switch_support_foot(int support_foot);
+  void set_config(const nlohmann::json & planner_data);
+  bool is_reached_target(
+    const keisan::Point2 & target_position, const keisan::Angle<double> & target_orientation,
+    keisan::Point2 & current_position, keisan::Angle<double> & current_orientation);
 
   void plan(
     const keisan::Point2 & target_position, const keisan::Angle<double> & target_orientation,
     keisan::Point2 & current_position, keisan::Angle<double> & current_orientation,
     int next_support, int status);
 
+  void set_period(double period) { this->period = period; }
   void print_foot_steps();
 
   std::deque<FootStep> foot_steps;
 
 private:
-  keisan::Point2 max_stride;
-  keisan::Angle<double> max_rotation;
   double period;
   double width;
+
+  // Steps
+  double max_forward;
+  double max_backward;
+  double max_left;
+  double max_right;
+  keisan::Angle<double> max_rotation;
+  double action_scale;
+
+  // Foot geometry
+  double foot_length;
+  double foot_width;
+  double feet_spacing;
+
+  // Target tolerance
+  double distance_tolerance;
+  double direction_tolerance;
+
+  // Obstacles
+  std::vector<Obstacle> obstacles;
+  size_t max_obstacle;
+  double max_obstacle_radius;
+
+  // OpenVINO
+  ov::Core core;
+  ov::CompiledModel compiled_model;
+  ov::InferRequest infer_request;
 };
 
 }  // namespace gankenkun

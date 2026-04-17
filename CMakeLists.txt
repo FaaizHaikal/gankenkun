@@ -25,8 +25,15 @@ find_package(jitsuyo REQUIRED)
 find_package(kansei REQUIRED)
 find_package(kansei_interfaces REQUIRED)
 find_package(keisan REQUIRED)
+find_package(OpenVINO REQUIRED)
 find_package(tachimawari REQUIRED)
 find_package(tachimawari_interfaces REQUIRED)
+
+message(STATUS "OpenCV library status:")
+message(STATUS "version:${OpenCV_VERSION}")
+message(STATUS "libraries:${OpenCV_LIBS}")
+message(STATUS "OpenCV include path:${OpenCV_INCLUDE_DIRS}")
+message(STATUS "OpenVINO include path env:${OpenVINO_DIR}/../include")
 
 add_library(${PROJECT_NAME} SHARED
   "src/${PROJECT_NAME}/config/node/config_node.cpp"
@@ -39,9 +46,9 @@ add_library(${PROJECT_NAME} SHARED
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+  $<INSTALL_INTERFACE:include>
+  ${OpenVINO_DIR}/../include)
 
 ament_target_dependencies(${PROJECT_NAME}
   ament_index_cpp
@@ -51,8 +58,13 @@ ament_target_dependencies(${PROJECT_NAME}
   kansei
   kansei_interfaces
   keisan
+  OpenVINO
   tachimawari
   tachimawari_interfaces
+)
+
+target_link_libraries(${PROJECT_NAME}
+  openvino::runtime
 )
 
 install(DIRECTORY "include" DESTINATION ".")

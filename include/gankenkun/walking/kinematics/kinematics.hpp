@@ -24,6 +24,7 @@
 #include <array>
 #include <string>
 
+#include "gankenkun/walking/planner/foot_step_planner.hpp"
 #include "keisan/angle.hpp"
 #include "keisan/geometry/point_3.hpp"
 #include "nlohmann/json.hpp"
@@ -36,6 +37,8 @@ namespace gankenkun
 class Kinematics
 {
 public:
+  using FootStep = FootStepPlanner::FootStep;
+
   struct Foot
   {
     keisan::Point3 position;
@@ -48,6 +51,7 @@ public:
 
   void reset_angles();
   void set_config(const nlohmann::json & kinematic_data);
+  Foot forward_kinematics(int foot) const;
   void solve_inverse_kinematics(const Foot & left_foot, const Foot & right_foot);
 
   const std::array<keisan::Angle<double>, 23> & get_angles() const { return angles; }

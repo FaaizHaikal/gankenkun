@@ -85,6 +85,66 @@ void Kinematics::set_config(const nlohmann::json & kinematic_data)
   }
 }
 
+Kinematics::Foot Kinematics::forward_kinematics(int leg) const
+{
+  using tachimawari::joint::JointId;
+  Foot foot;
+
+  double L1 = thigh_length;
+  double L2 = calf_length;
+
+  if (leg == FootStepPlanner::LEFT_FOOT) {  // LEFT LEG
+    // Extract angles
+    keisan::Angle<double> yaw = angles[JointId::LEFT_HIP_YAW];
+    keisan::Angle<double> roll = angles[JointId::LEFT_HIP_ROLL];
+    keisan::Angle<double> hp = -angles[JointId::LEFT_HIP_PITCH];
+    keisan::Angle<double> kp = -angles[JointId::LEFT_KNEE];
+
+    // Get x, z displacement
+    double pz = L1 * hp.cos() + L2 * (hp + kp).cos();
+    double px = L1 * hp.sin() + L2 * (hp + kp).sin();
+
+    // Get y displacement
+    double py = pz * roll.tan();
+
+    // Unrotate hip yaw
+    double left_x = px * yaw.cos() - py * yaw.sin();
+    double left_y = px * yaw.sin() + py * yaw.cos();
+
+    // Reapply offsets
+    foot.position.x = left_x + x_offset;
+    foot.position.y = left_y + y_offset;
+    foot.position.z = L1 + L2 - pz;
+    foot.yaw = yaw;
+
+  } else {  // RIGHT LEG
+    // Extract angles
+    keisan::Angle<double> yaw = angles[JointId::RIGHT_HIP_YAW];
+    keisan::Angle<double> roll = angles[JointId::RIGHT_HIP_ROLL];
+    keisan::Angle<double> hp = angles[JointId::RIGHT_HIP_PITCH];
+    keisan::Angle<double> kp = angles[JointId::RIGHT_KNEE];
+
+    // Get x, z displacement
+    double pz = L1 * hp.cos() + L2 * (hp + kp).cos();
+    double px = L1 * hp.sin() + L2 * (hp + kp).sin();
+
+    // Get y displacement
+    double py = pz * roll.tan();
+
+    // Unrotate hip yaw
+    double right_x = px * yaw.cos() - py * yaw.sin();
+    double right_y = px * yaw.sin() + py * yaw.cos();
+
+    // Reapply offsets
+    foot.position.x = right_x + x_offset;
+    foot.position.y = right_y - y_offset;
+    foot.position.z = L1 + L2 - pz;
+    foot.yaw = yaw;
+  }
+
+  return foot;
+}
+
 void Kinematics::solve_inverse_kinematics(const Foot & left_foot, const Foot & right_foot)
 {
   using tachimawari::joint::JointId;

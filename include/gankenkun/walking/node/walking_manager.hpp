@@ -39,7 +39,9 @@ public:
   WalkingManager();
 
   void load_config(const std::string & path);
-  void set_config(const nlohmann::json & walking_data, const nlohmann::json & kinematic_data);
+  void set_config(
+    const nlohmann::json & walking_data, const nlohmann::json & kinematic_data,
+    const nlohmann::json & planner_data);
 
   void stop();
   void update_time();
@@ -58,6 +60,7 @@ public:
 
   const keisan::Point2 & get_position() const { return robot_position; }
   bool is_running();
+  void update_odometry(int current_support);
 
 private:
   keisan::Angle<double> get_balance_body_pitch() const;
@@ -69,8 +72,10 @@ private:
   int status;
   bool initialized;
   int next_support;
+  int previous_support;
   keisan::Point2 robot_position;
   keisan::Angle<double> robot_orientation;
+  keisan::Point2 support_foot_position;
 
   // Timing parameters
   double time_step;

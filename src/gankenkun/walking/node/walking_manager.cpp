@@ -38,6 +38,7 @@ WalkingManager::WalkingManager()
   time_step(0.008),
   status(FootStepPlanner::START),
   next_support(FootStepPlanner::RIGHT_FOOT),
+  previous_support(FootStepPlanner::BOTH_FEET),
   dsp_duration(0.0),
   plan_period(0.0),
   step_frames(0.0),
@@ -70,16 +71,22 @@ void WalkingManager::load_config(const std::string & path)
   std::ifstream kinematic_file(path + "kinematic.json");
   nlohmann::json kinematic_data = nlohmann::json::parse(kinematic_file);
 
-  set_config(walking_data, kinematic_data);
+  std::ifstream planner_file(path + "planner.json");
+  nlohmann::json planner_data = nlohmann::json::parse(planner_file);
+
+  set_config(walking_data, kinematic_data, planner_data);
+  foot_step_planner.initialize(path);
 
   walking_file.close();
   kinematic_file.close();
+  planner_file.close();
 
   set_goal(keisan::Point2(0.0, 0.0), 0.0_deg);
 }
 
 void WalkingManager::set_config(
-  const nlohmann::json & walking_data, const nlohmann::json & kinematic_data)
+  const nlohmann::json & walking_data, const nlohmann::json & kinematic_data,
+  const nlohmann::json & planner_data)
 {
   bool valid_config = true;
 
@@ -167,35 +174,15 @@ void WalkingManager::set_config(
     valid_config = false;
   }
 
-  nlohmann::json stride_section;
-  if (jitsuyo::assign_val(walking_data, "stride", stride_section)) {
-    bool valid_section = true;
-
-    double max_rotation_double;
-
-    valid_section &= jitsuyo::assign_val(stride_section, "max_x", max_stride.x);
-    valid_section &= jitsuyo::assign_val(stride_section, "max_y", max_stride.y);
-    valid_section &= jitsuyo::assign_val(stride_section, "max_a", max_rotation_double);
-
-    max_rotation = keisan::make_degree(max_rotation_double);
-
-    if (!valid_section) {
-      std::cout << "Error found at section `stride`" << std::endl;
-      valid_config = false;
-    }
-  } else {
-    valid_config = false;
-  }
-
   if (!valid_config) {
     throw std::runtime_error("Failed to load config file `walking.json`");
   }
 
-  foot_step_planner.set_parameters(max_stride, max_rotation, plan_period, step_y_offset);
-
   lipm.set_parameters(com_height, time_step, com_period);
 
   kinematics.set_config(kinematic_data);
+  foot_step_planner.set_config(planner_data);
+  foot_step_planner.set_period(plan_period);
 }
 
 void WalkingManager::set_position(const keisan::Point2 & position) { robot_position = position; }
@@ -320,8 +307,9 @@ void WalkingManager::update_joints()
   double ssp_start = round(dsp_duration / (2 * time_step));
   double ssp_end = round(step_period / 2);
   double ssp_duration = ssp_end - ssp_start;
+  int current_support = foot_step_planner.foot_steps[0].support_foot;
 
-  if (foot_step_planner.foot_steps[0].support_foot == FootStepPlanner::LEFT_FOOT) {
+  if (current_support == FootStepPlanner::LEFT_FOOT) {
     // Raise or lower right foot
     double diff = step_period - lipm.get_com_trajectory().size();
     if (ssp_start < diff && diff <= ssp_end) {
@@ -338,7 +326,7 @@ void WalkingManager::update_joints()
         right_offset = right_foot_target;
       }
     }
-  } else if (foot_step_planner.foot_steps[0].support_foot == FootStepPlanner::RIGHT_FOOT) {
+  } else if (current_support == FootStepPlanner::RIGHT_FOOT) {
     // Raise or lower left foot
     double diff = step_period - lipm.get_com_trajectory().size();
     if (ssp_start < diff && diff <= ssp_end) {
@@ -397,11 +385,41 @@ void WalkingManager::update_joints()
       joint.set_position(angles[id].degree());
     }
 
-    robot_position = com.position + odometry_offset;
+    update_odometry(current_support);
   } catch (const std::exception & e) {
     std::cerr << "Failed to solve inverse kinematics!" << std::endl;
     std::cerr << e.what() << std::endl;
   }
+}
+
+void WalkingManager::update_odometry(int current_support)
+{
+  if (current_support == FootStepPlanner::BOTH_FEET) {
+    previous_support = current_support;
+    return;
+  }
+
+  if (current_support != previous_support) {
+    Kinematics::Foot newly_planted_foot = kinematics.forward_kinematics(current_support);
+
+    support_foot_position.x =
+      robot_position.x + (newly_planted_foot.position.x * robot_orientation.cos() -
+                          newly_planted_foot.position.y * robot_orientation.sin());
+    support_foot_position.y =
+      robot_position.y + (newly_planted_foot.position.x * robot_orientation.sin() +
+                          newly_planted_foot.position.y * robot_orientation.cos());
+    previous_support = current_support;
+  }
+
+  Kinematics::Foot support_foot_local = kinematics.forward_kinematics(current_support);
+
+  double cos_yaw = robot_orientation.cos();
+  double sin_yaw = robot_orientation.sin();
+
+  robot_position.x = support_foot_position.x - (support_foot_local.position.x * cos_yaw -
+                                                support_foot_local.position.y * sin_yaw);
+  robot_position.y = support_foot_position.y - (support_foot_local.position.x * sin_yaw +
+                                                support_foot_local.position.y * cos_yaw);
 }
 
 void WalkingManager::process()
@@ -411,6 +429,7 @@ void WalkingManager::process()
     update_time();
   }
 
+  foot_step_planner.print_foot_steps();
   update_joints();
 }
 
