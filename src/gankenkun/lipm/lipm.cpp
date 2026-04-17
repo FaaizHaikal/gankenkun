@@ -25,11 +25,13 @@ namespace gankenkun
 
 LIPM::LIPM() : dt(0.0), period(0.0), z(0.0) {}
 
-void LIPM::set_parameters(double z, double dt, double period)
+void LIPM::set_parameters(double z, double dt, double period, double kp, double kd)
 {
   this->z = z;
   this->dt = dt;
   this->period = period;
+  this->balance_kp = kp;
+  this->balance_kd = kd;
 
   initialize();
   solve_dare();
@@ -143,54 +145,53 @@ void LIPM::update(double time, const std::deque<FootStepPlanner::FootStep> & foo
     velocity.y = 0.0;
   }
 
+  // Safety: need at least current + next step
+  if (foot_steps.size() < 2) {
+    return;
+  }
+
   com_trajectory.clear();
+
   auto next_x_state = x_state;
   auto next_y_state = y_state;
 
-  for (int i = 0; i < static_cast<int>(round((foot_steps[1].time - time) / dt)); i++) {
+  // Duration of ONE step only
+  int horizon = static_cast<int>(round((foot_steps[1].time - time) / dt));
+
+  // Target = NEXT foot (NOT front!)
+  double target_x = foot_steps[1].position.x;
+  double target_y = foot_steps[1].position.y;
+
+  for (int i = 0; i < horizon; i++) {
     auto projected_x = C_d * next_x_state;
     auto projected_y = C_d * next_y_state;
 
-    auto error_x = foot_steps.front().position.x - projected_x[0][0];
-    auto error_y = foot_steps.front().position.y - projected_y[0][0];
+    double zmp_x = projected_x[0][0];
+    double zmp_y = projected_y[0][0];
 
-    auto X = keisan::Matrix<4, 1>(
-      error_x, next_x_state[0][0] - x_state[0][0], next_x_state[1][0] - x_state[1][0],
-      next_x_state[2][0] - x_state[2][0]);
+    double error_x = target_x - zmp_x;
+    double error_y = target_y - zmp_y;
 
-    auto Y = keisan::Matrix<4, 1>(
-      error_y, next_y_state[0][0] - y_state[0][0], next_y_state[1][0] - y_state[1][0],
-      next_y_state[2][0] - y_state[2][0]);
+    double acc_x = balance_kp * error_x - balance_kd * velocity.x;
+    double acc_y = balance_kp * error_y - balance_kd * velocity.y;
 
+    // Integrate velocity
+    velocity.x += acc_x * dt;
+    velocity.y += acc_y * dt;
+
+    // Update states
     x_state = next_x_state;
     y_state = next_y_state;
-
-    auto dx = F * X;
-    auto dy = F * Y;
-
-    size_t index = 1;
-    for (int j = 0; j < static_cast<int>(round(period / dt)); j++) {
-      if (
-        static_cast<int>(round(i + j) + time / dt) >=
-        static_cast<int>(round(foot_steps[index].time / dt))) {
-        dx += f[j] * (foot_steps[index].position.x - foot_steps[index - 1].position.x);
-        dy += f[j] * (foot_steps[index].position.y - foot_steps[index - 1].position.y);
-        index++;
-      }
-    }
-
-    velocity.x += dx[0][0];
-    velocity.y += dy[0][0];
 
     next_x_state = A_d * x_state + B_d * velocity.x;
     next_y_state = A_d * y_state + B_d * velocity.y;
 
-    auto com = COMTrajectory();
+    COMTrajectory com;
 
     com.position.x = next_x_state[0][0];
     com.position.y = next_y_state[0][0];
-    com.projected_position.x = projected_x[0][0];
-    com.projected_position.y = projected_y[0][0];
+    com.projected_position.x = zmp_x;
+    com.projected_position.y = zmp_y;
 
     com_trajectory.push_back(com);
   }

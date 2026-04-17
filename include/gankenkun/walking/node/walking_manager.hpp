@@ -49,9 +49,9 @@ public:
 
   const std::vector<tachimawari::joint::Joint> & get_joints() const { return joints; }
 
-  void remove_steps();
-  void set_goal(
-    const keisan::Point2 & goal_position, const keisan::Angle<double> & goal_orientation);
+  bool is_target_reached();
+  void set_goal(const keisan::Point2 & position, const keisan::Angle<double> & orientation);
+  void generate_next_step();
 
   void set_position(const keisan::Point2 & position);
   void set_orientation(const keisan::Angle<double> & orientation);
@@ -66,11 +66,18 @@ private:
   LIPM lipm;
   FootStepPlanner foot_step_planner;
 
+  // State
   int status;
   bool initialized;
   int next_support;
   keisan::Point2 robot_position;
   keisan::Angle<double> robot_orientation;
+  keisan::Point2 target_position;
+  keisan::Angle<double> target_orientation;
+
+  // Tolerance
+  double distance_tolerance;
+  double direction_tolerance;
 
   // Timing parameters
   double time_step;
@@ -82,7 +89,6 @@ private:
   // Posture parameters
   double com_height;
   double foot_height;
-  double feet_lateral;
   keisan::Angle<double> forward_lean;
   double forward_lean_ratio;
   keisan::Angle<double> backward_lean;
@@ -98,10 +104,6 @@ private:
   keisan::Point3 foot_offset;
   double step_y_offset;
   keisan::Point2 odometry_offset;
-
-  // Maximum stride parameters
-  keisan::Point2 max_stride;
-  keisan::Angle<double> max_rotation;
 
   double left_up;
   double right_up;

@@ -41,7 +41,7 @@ public:
   void update(
     double time, const std::deque<FootStepPlanner::FootStep> & foot_steps, bool reset = false);
 
-  void set_parameters(double z, double dt, double period);
+  void set_parameters(double z, double dt, double period, double kp, double kd);
 
   struct COMTrajectory
   {
@@ -57,6 +57,8 @@ private:
   double dt;
   double period;
   double z;
+  double balance_kp;
+  double balance_kd;
 
   // Discrete-time system matrices
   keisan::Matrix<3, 3> A_d;

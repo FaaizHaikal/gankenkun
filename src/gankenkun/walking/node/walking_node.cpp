@@ -37,19 +37,13 @@ WalkingNode::WalkingNode(
   set_walking_subscriber = node->create_subscription<SetWalking>(
     "walking/set_walking", 10,
     [this](const SetWalking::SharedPtr message) {
-      while (true) {
-        if (this->walking_manager->replan()) {
-          if (message->run) {
-            this->walking_manager->set_goal(
-              keisan::Point2(message->position.x, message->position.y),
-              keisan::make_degree(message->orientation));
-          } else {
-            this->walking_manager->stop();
-          }
-
-          return;
-        }
+      if (!message->run) {
+        this->walking_manager->stop();
+        return;
       }
+      this->walking_manager->set_goal(
+        keisan::Point2(message->position.x, message->position.y),
+        keisan::make_degree(message->orientation));
     },
     subscriber_option);
 

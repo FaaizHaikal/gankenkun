@@ -36,23 +36,20 @@ WalkingManager::WalkingManager()
   robot_position(keisan::Point2(0.0, 0.0)),
   robot_orientation(0.0_deg),
   time_step(0.008),
-  status(FootStepPlanner::START),
+  status(FootStepPlanner::STOP),
   next_support(FootStepPlanner::RIGHT_FOOT),
   dsp_duration(0.0),
   plan_period(0.0),
   step_frames(0.0),
   com_height(0.0),
   foot_height(0.0),
-  feet_lateral(0.0),
   forward_lean(0.0_deg),
   forward_lean_ratio(0.0),
   backward_lean(0.0_deg),
   backward_lean_ratio(0.0),
   foot_offset(keisan::Point3(0.0, 0.0, 0.0)),
   step_y_offset(0.0),
-  odometry_offset(keisan::Point2(0.0, 0.0)),
-  max_stride(keisan::Point2(0.0, 0.0)),
-  max_rotation(0.0_deg)
+  odometry_offset(keisan::Point2(0.0, 0.0))
 {
   using tachimawari::joint::Joint;
   using tachimawari::joint::JointId;
@@ -71,6 +68,9 @@ void WalkingManager::load_config(const std::string & path)
   nlohmann::json kinematic_data = nlohmann::json::parse(kinematic_file);
 
   set_config(walking_data, kinematic_data);
+
+  foot_step_planner.set_config(walking_data);
+  foot_step_planner.initialize(path, plan_period);
 
   walking_file.close();
   kinematic_file.close();
@@ -106,7 +106,6 @@ void WalkingManager::set_config(
 
     valid_section &= jitsuyo::assign_val(posture_section, "com_height", com_height);
     valid_section &= jitsuyo::assign_val(posture_section, "foot_height", foot_height);
-    valid_section &= jitsuyo::assign_val(posture_section, "feet_lateral", feet_lateral);
     valid_section &= jitsuyo::assign_val(posture_section, "left_shoulder_roll", left_shoulder_roll);
     valid_section &=
       jitsuyo::assign_val(posture_section, "left_shoulder_pitch", left_shoulder_pitch);
@@ -125,6 +124,8 @@ void WalkingManager::set_config(
     valid_config = false;
   }
 
+  double balance_kp;
+  double balance_kd;
   nlohmann::json balance_section;
   if (jitsuyo::assign_val(walking_data, "balance", balance_section)) {
     bool valid_section = true;
@@ -136,6 +137,8 @@ void WalkingManager::set_config(
     valid_section &= jitsuyo::assign_val(balance_section, "backward_lean", backward_lean_degree);
     valid_section &=
       jitsuyo::assign_val(balance_section, "backward_lean_ratio", backward_lean_ratio);
+    valid_section &= jitsuyo::assign_val(balance_section, "balance_kp", balance_kp);
+    valid_section &= jitsuyo::assign_val(balance_section, "balance_kd", balance_kd);
 
     forward_lean = keisan::make_degree(forward_lean_degree);
     backward_lean = keisan::make_degree(backward_lean_degree);
@@ -167,20 +170,16 @@ void WalkingManager::set_config(
     valid_config = false;
   }
 
-  nlohmann::json stride_section;
-  if (jitsuyo::assign_val(walking_data, "stride", stride_section)) {
+  nlohmann::json target_section;
+  if (jitsuyo::assign_val(walking_data, "target", target_section)) {
     bool valid_section = true;
 
-    double max_rotation_double;
-
-    valid_section &= jitsuyo::assign_val(stride_section, "max_x", max_stride.x);
-    valid_section &= jitsuyo::assign_val(stride_section, "max_y", max_stride.y);
-    valid_section &= jitsuyo::assign_val(stride_section, "max_a", max_rotation_double);
-
-    max_rotation = keisan::make_degree(max_rotation_double);
+    valid_section &= jitsuyo::assign_val(target_section, "distance_tolerance", distance_tolerance);
+    valid_section &=
+      jitsuyo::assign_val(target_section, "direction_tolerance", direction_tolerance);
 
     if (!valid_section) {
-      std::cout << "Error found at section `stride`" << std::endl;
+      std::cout << "Error found at section `target`" << std::endl;
       valid_config = false;
     }
   } else {
@@ -191,9 +190,7 @@ void WalkingManager::set_config(
     throw std::runtime_error("Failed to load config file `walking.json`");
   }
 
-  foot_step_planner.set_parameters(max_stride, max_rotation, plan_period, step_y_offset);
-
-  lipm.set_parameters(com_height, time_step, com_period);
+  lipm.set_parameters(com_height, time_step, com_period, balance_kp, balance_kd);
 
   kinematics.set_config(kinematic_data);
 }
@@ -205,69 +202,55 @@ void WalkingManager::set_orientation(const keisan::Angle<double> & orientation)
   robot_orientation = orientation;
 }
 
+void WalkingManager::set_goal(
+  const keisan::Point2 & position, const keisan::Angle<double> & orientation)
+{
+  target_position = position;
+  target_orientation = orientation;
+}
+
 bool WalkingManager::is_running() { return status == FootStepPlanner::WALKING; }
 
 void WalkingManager::stop() { set_goal(robot_position, robot_orientation); }
-
-void WalkingManager::remove_steps()
-{
-  if (foot_step_planner.foot_steps.size() <= 4) {
-    status = FootStepPlanner::START;
-  }
-
-  if (foot_step_planner.foot_steps.size() > 3) {
-    foot_step_planner.foot_steps.pop_front();
-  }
-}
 
 bool WalkingManager::replan() { return lipm.get_com_trajectory().empty(); }
 
 keisan::Angle<double> WalkingManager::get_balance_body_pitch() const
 {
-  if (foot_step_planner.foot_steps.size() < 2 || max_stride.x <= 0.0) {
+  if (foot_step_planner.foot_steps.size() <= 1) {
     return forward_lean;
   }
 
   double stride_x =
     foot_step_planner.foot_steps[1].position.x - foot_step_planner.foot_steps[0].position.x;
-  double normalized_stride_x = keisan::clamp(stride_x / max_stride.x, -1.0, 1.0);
 
+  double normalized_stride_x = 0.0;
+
+  if (stride_x >= 0.0) {
+    if (foot_step_planner.get_max_forward_stride() > 0.0) {
+      normalized_stride_x = stride_x / foot_step_planner.get_max_forward_stride();
+    }
+  } else {
+    if (foot_step_planner.get_max_backward_stride() > 0.0) {
+      normalized_stride_x = stride_x / foot_step_planner.get_max_backward_stride();
+    }
+  }
+
+  normalized_stride_x = keisan::clamp(normalized_stride_x, -1.0, 1.0);
   if (normalized_stride_x >= 0.0) {
     return forward_lean + keisan::make_degree(forward_lean_ratio * normalized_stride_x);
+  } else {
+    return forward_lean - (backward_lean + keisan::make_degree(
+                                             backward_lean_ratio * std::abs(normalized_stride_x)));
   }
-
-  return forward_lean -
-         (backward_lean + keisan::make_degree(backward_lean_ratio * std::abs(normalized_stride_x)));
-}
-
-void WalkingManager::set_goal(
-  const keisan::Point2 & goal_position, const keisan::Angle<double> & goal_orientation)
-{
-  keisan::Point2 current_position = keisan::Point2(0.0, 0.0);
-  keisan::Angle<double> current_orientation = 0.0_deg;
-
-  if (foot_step_planner.foot_steps.size() > 2) {
-    double y_offset = 0.0;
-
-    if (status != FootStepPlanner::START) {
-      y_offset = next_support == FootStepPlanner::LEFT_FOOT ? -step_y_offset : step_y_offset;
-    }
-
-    current_position.x = foot_step_planner.foot_steps[1].position.x;
-    current_position.y = foot_step_planner.foot_steps[1].position.y + y_offset;
-    current_orientation = foot_step_planner.foot_steps[1].rotation;
-  }
-
-  foot_step_planner.plan(
-    goal_position, goal_orientation, current_position, current_orientation, next_support, status);
-
-  status = FootStepPlanner::WALKING;
-
-  update_time();
 }
 
 void WalkingManager::update_time()
 {
+  if (foot_step_planner.foot_steps.size() < 2) {
+    return;
+  }
+
   double time = foot_step_planner.foot_steps[0].time;
   lipm.update(time, foot_step_planner.foot_steps);
 
@@ -278,8 +261,7 @@ void WalkingManager::update_time()
         foot_step_planner.foot_steps[1].rotation.radian());
     } else {
       right_foot_target = keisan::Matrix<1, 3>(
-        foot_step_planner.foot_steps[1].position.x,
-        foot_step_planner.foot_steps[1].position.y + step_y_offset,
+        foot_step_planner.foot_steps[1].position.x, foot_step_planner.foot_steps[1].position.y,
         foot_step_planner.foot_steps[1].rotation.radian());
     }
 
@@ -292,8 +274,7 @@ void WalkingManager::update_time()
         foot_step_planner.foot_steps[1].rotation.radian());
     } else {
       left_foot_target = keisan::Matrix<1, 3>(
-        foot_step_planner.foot_steps[1].position.x,
-        foot_step_planner.foot_steps[1].position.y - step_y_offset,
+        foot_step_planner.foot_steps[1].position.x, foot_step_planner.foot_steps[1].position.y,
         foot_step_planner.foot_steps[1].rotation.radian());
     }
 
@@ -306,6 +287,10 @@ void WalkingManager::update_time()
 
 void WalkingManager::update_joints()
 {
+  if (foot_step_planner.foot_steps.size() < 2 || lipm.get_com_trajectory().empty()) {
+    return;
+  }
+
   auto com = lipm.pop_front();
   auto body_pitch = get_balance_body_pitch();
 
@@ -397,20 +382,63 @@ void WalkingManager::update_joints()
       joint.set_position(angles[id].degree());
     }
 
-    robot_position = com.position + odometry_offset;
+    printf("com: %f %f\n", com.position.x, com.position.y);
+    robot_position = foot_step_planner.foot_steps[0].position + com.position;
   } catch (const std::exception & e) {
     std::cerr << "Failed to solve inverse kinematics!" << std::endl;
     std::cerr << e.what() << std::endl;
   }
 }
 
+bool WalkingManager::is_target_reached()
+{
+  double dist = (target_position - robot_position).magnitude();
+  double direction = (target_orientation - robot_orientation).normalize().degree();
+
+  return dist <= distance_tolerance && std::abs(direction) <= direction_tolerance;
+}
+
+void WalkingManager::generate_next_step()
+{
+  auto & steps = foot_step_planner.foot_steps;
+
+  auto support = steps.back();  // last known
+
+  keisan::Point2 pos = support.position;
+  keisan::Angle<double> yaw = support.rotation;
+
+  bool is_right = (support.support_foot == FootStepPlanner::RIGHT_FOOT);
+
+  double time = support.time;
+
+  foot_step_planner.plan_next_step(target_position, target_orientation, pos, yaw, is_right, time);
+}
+
 void WalkingManager::process()
 {
-  if (lipm.get_com_trajectory().empty() || status == FootStepPlanner::STOP) {
-    remove_steps();
-    update_time();
+  // Step finished → advance
+  if (!lipm.get_com_trajectory().empty()) {
+    if (foot_step_planner.foot_steps.size() > 1) {
+      foot_step_planner.foot_steps.pop_front();
+    }
   }
 
+  foot_step_planner.print_foot_steps();
+  printf("target: %f %f\n", target_position.x, target_position.y);
+  printf("current: %f %f\n", robot_position.x, robot_position.y);
+  if (is_target_reached()) {
+    printf("planning stop\n");
+    foot_step_planner.plan_stop(robot_position, robot_orientation);
+  }
+
+  // Generate next step ONLY if needed
+  if (!is_target_reached() && foot_step_planner.foot_steps.size() < 2) {
+    generate_next_step();
+  }
+
+  if (lipm.get_com_trajectory().empty()) {
+    update_time();
+  }
   update_joints();
 }
 
