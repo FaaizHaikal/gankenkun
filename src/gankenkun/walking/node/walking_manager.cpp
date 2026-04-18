@@ -230,8 +230,8 @@ keisan::Angle<double> WalkingManager::get_balance_body_pitch() const
 void WalkingManager::set_goal(
   const keisan::Point2 & goal_position, const keisan::Angle<double> & goal_orientation)
 {
-  keisan::Point2 current_position = keisan::Point2(0.0, 0.0);
-  keisan::Angle<double> current_orientation = 0.0_deg;
+  auto current_position = robot_position;
+  auto current_orientation = robot_orientation;
 
   if (foot_step_planner.foot_steps.size() > 2) {
     double y_offset = 0.0;
@@ -402,24 +402,15 @@ void WalkingManager::update_odometry(int current_support)
   if (current_support != previous_support) {
     Kinematics::Foot newly_planted_foot = kinematics.forward_kinematics(current_support);
 
-    support_foot_position.x =
-      robot_position.x + (newly_planted_foot.position.x * robot_orientation.cos() -
-                          newly_planted_foot.position.y * robot_orientation.sin());
-    support_foot_position.y =
-      robot_position.y + (newly_planted_foot.position.x * robot_orientation.sin() +
-                          newly_planted_foot.position.y * robot_orientation.cos());
+    support_foot_position.x = robot_position.x + newly_planted_foot.position.x;
+    support_foot_position.y = robot_position.y + newly_planted_foot.position.y;
     previous_support = current_support;
   }
 
   Kinematics::Foot support_foot_local = kinematics.forward_kinematics(current_support);
 
-  double cos_yaw = robot_orientation.cos();
-  double sin_yaw = robot_orientation.sin();
-
-  robot_position.x = support_foot_position.x - (support_foot_local.position.x * cos_yaw -
-                                                support_foot_local.position.y * sin_yaw);
-  robot_position.y = support_foot_position.y - (support_foot_local.position.x * sin_yaw +
-                                                support_foot_local.position.y * cos_yaw);
+  robot_position.x = support_foot_position.x - support_foot_local.position.x;
+  robot_position.y = support_foot_position.y - support_foot_local.position.y;
 }
 
 void WalkingManager::process()

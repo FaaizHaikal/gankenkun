@@ -59,6 +59,7 @@ public:
   void set_orientation(const keisan::Angle<double> & orientation);
 
   const keisan::Point2 & get_position() const { return robot_position; }
+  const keisan::Angle<double> & get_orientation() const { return robot_orientation; }
   bool is_running();
   void update_odometry(int current_support);
 

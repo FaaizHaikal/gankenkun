@@ -126,13 +126,6 @@ std::vector<float> FootStepPlanner::infer(const std::vector<float> & obs)
   auto output = infer_request.get_output_tensor();
   const float * out = output.data<const float>();
 
-  // size_t output_size = output.get_size();
-
-  // Debug Print
-  // for (size_t i = 0; i < output_size; ++i) {
-  //   std::cout << "out[" << i << "]: " << out[i] << "\n";
-  // }
-
   return {out[0], out[1], out[2]};
 }
 
@@ -152,10 +145,10 @@ std::vector<float> FootStepPlanner::build_observation(
   double x = c * dx + s * dy;
   double y = -s * dx + c * dy;
 
-  double dtheta = (target_yaw - support_yaw).normalize().radian();
+  auto dtheta = (target_yaw - support_yaw).normalize(0.0, 360.0);
 
-  double ct = std::cos(dtheta);
-  double st = std::sin(dtheta);
+  double ct = dtheta.cos();
+  double st = dtheta.sin();
   bool is_right_support = next_support == RIGHT_FOOT;
   bool same_stop_foot = false;
 
@@ -205,13 +198,14 @@ void FootStepPlanner::apply_action(
   const std::vector<float> & action)
 {
   double dx = action[0] * action_scale;
-  double dy = action[1] * action_scale;
+  double dy = action[1] * action_scale + feet_spacing;
   double dtheta = action[2] * action_scale;
 
   // Clamp
   dx = keisan::clamp(dx, -max_backward, max_forward);
   dy = keisan::clamp(dy, -max_right, max_left);
   dtheta = keisan::clamp(dtheta, -max_rotation.radian(), max_rotation.radian());
+  // printf("dx: %f, dy: %f, dtheta: %f\n", dx, dy, dtheta);
   bool is_right_support = next_support == RIGHT_FOOT;
 
   // Symmetry (LEFT FOOT)
@@ -221,16 +215,17 @@ void FootStepPlanner::apply_action(
   }
 
   // Transform to world
-  double c = std::cos(support_yaw.radian());
-  double s = std::sin(support_yaw.radian());
+  double c = support_yaw.cos();
+  double s = support_yaw.sin();
 
   double wx = c * dx - s * dy;
   double wy = s * dx + c * dy;
 
   support_pos.x += wx;
-  support_pos.y += (wy);
+  support_pos.y += wy;
 
-  support_yaw += keisan::make_radian(dtheta);
+  support_yaw += keisan::make_radian(dtheta).normalize();
+  // printf("sup yaw: %f\n", support_yaw.degree());
 }
 
 void FootStepPlanner::plan(
@@ -328,7 +323,7 @@ void FootStepPlanner::print_foot_steps()
 
     std::cout << "Step " << counter++ << "-> Time(" << step.time << "); Position("
               << step.position.x << ", " << step.position.y << "); Rotation("
-              << step.rotation.radian() << "); "
+              << step.rotation.degree() << "); "
               << "Support(\'" << support << "\')\n";
   }
 }

@@ -41,7 +41,7 @@ WalkingNode::WalkingNode(
         if (this->walking_manager->replan()) {
           if (message->run) {
             this->walking_manager->set_goal(
-              keisan::Point2(message->position.x, message->position.y),
+              keisan::Point2(message->position.x / -100.0, message->position.y / -100.0),
               keisan::make_degree(message->orientation));
           } else {
             this->walking_manager->stop();
@@ -55,13 +55,11 @@ WalkingNode::WalkingNode(
 
   set_odometry_subscriber = node->create_subscription<Point2>(
     "walking/set_odometry", 10, [this](const Point2::SharedPtr message) {
-      // TODO: Set robot odometry
-      this->walking_manager->set_position(keisan::Point2(message->x, message->y));
+      this->walking_manager->set_position(keisan::Point2(message->x / -100.0, message->y / -100.0));
     });
 
   orientation_subscriber = node->create_subscription<KanseiStatus>(
     "measurement/status", 10, [this](const KanseiStatus::SharedPtr message) {
-      // TODO: Update robot orientation
       this->walking_manager->set_orientation(keisan::make_degree(message->orientation.yaw));
     });
 
@@ -100,7 +98,7 @@ void WalkingNode::publish_status()
 
   status_msg.is_running = walking_manager->is_running();
   status_msg.odometry.x = walking_manager->get_position().x * -100.0;
-  status_msg.odometry.y = walking_manager->get_position().y * 100.0;
+  status_msg.odometry.y = walking_manager->get_position().y * -100.0;
 
   status_publisher->publish(status_msg);
 }
