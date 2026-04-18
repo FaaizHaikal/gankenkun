@@ -88,7 +88,6 @@ private:
   // Posture parameters
   double com_height;
   double foot_height;
-  double feet_lateral;
   keisan::Angle<double> forward_lean;
   double forward_lean_ratio;
   keisan::Angle<double> backward_lean;
@@ -102,7 +101,6 @@ private:
 
   // Offset parameters
   keisan::Point3 foot_offset;
-  double step_y_offset;
   keisan::Point2 odometry_offset;
 
   // Maximum stride parameters

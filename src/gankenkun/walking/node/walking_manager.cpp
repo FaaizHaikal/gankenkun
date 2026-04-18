@@ -44,13 +44,11 @@ WalkingManager::WalkingManager()
   step_frames(0.0),
   com_height(0.0),
   foot_height(0.0),
-  feet_lateral(0.0),
   forward_lean(0.0_deg),
   forward_lean_ratio(0.0),
   backward_lean(0.0_deg),
   backward_lean_ratio(0.0),
   foot_offset(keisan::Point3(0.0, 0.0, 0.0)),
-  step_y_offset(0.0),
   odometry_offset(keisan::Point2(0.0, 0.0)),
   max_stride(keisan::Point2(0.0, 0.0)),
   max_rotation(0.0_deg)
@@ -113,7 +111,6 @@ void WalkingManager::set_config(
 
     valid_section &= jitsuyo::assign_val(posture_section, "com_height", com_height);
     valid_section &= jitsuyo::assign_val(posture_section, "foot_height", foot_height);
-    valid_section &= jitsuyo::assign_val(posture_section, "feet_lateral", feet_lateral);
     valid_section &= jitsuyo::assign_val(posture_section, "left_shoulder_roll", left_shoulder_roll);
     valid_section &=
       jitsuyo::assign_val(posture_section, "left_shoulder_pitch", left_shoulder_pitch);
@@ -162,7 +159,6 @@ void WalkingManager::set_config(
     valid_section &= jitsuyo::assign_val(offset_section, "foot_x_offset", foot_offset.x);
     valid_section &= jitsuyo::assign_val(offset_section, "foot_y_offset", foot_offset.y);
     valid_section &= jitsuyo::assign_val(offset_section, "foot_z_offset", foot_offset.z);
-    valid_section &= jitsuyo::assign_val(offset_section, "step_y_offset", step_y_offset);
     valid_section &= jitsuyo::assign_val(offset_section, "odometry_x_offset", odometry_offset.x);
     valid_section &= jitsuyo::assign_val(offset_section, "odometry_y_offset", odometry_offset.y);
 
@@ -183,6 +179,7 @@ void WalkingManager::set_config(
   kinematics.set_config(kinematic_data);
   foot_step_planner.set_config(planner_data);
   foot_step_planner.set_period(plan_period);
+  foot_step_planner.set_feet_spacing(foot_offset.y);
 }
 
 void WalkingManager::set_position(const keisan::Point2 & position) { robot_position = position; }
@@ -237,7 +234,7 @@ void WalkingManager::set_goal(
     double y_offset = 0.0;
 
     if (status != FootStepPlanner::START) {
-      y_offset = next_support == FootStepPlanner::LEFT_FOOT ? -step_y_offset : step_y_offset;
+      y_offset = next_support == FootStepPlanner::LEFT_FOOT ? -foot_offset.y : foot_offset.y;
     }
 
     current_position.x = foot_step_planner.foot_steps[1].position.x;
@@ -266,7 +263,7 @@ void WalkingManager::update_time()
     } else {
       right_foot_target = keisan::Matrix<1, 3>(
         foot_step_planner.foot_steps[1].position.x,
-        foot_step_planner.foot_steps[1].position.y + step_y_offset,
+        foot_step_planner.foot_steps[1].position.y - foot_offset.y,
         foot_step_planner.foot_steps[1].rotation.radian());
     }
 
@@ -280,7 +277,7 @@ void WalkingManager::update_time()
     } else {
       left_foot_target = keisan::Matrix<1, 3>(
         foot_step_planner.foot_steps[1].position.x,
-        foot_step_planner.foot_steps[1].position.y - step_y_offset,
+        foot_step_planner.foot_steps[1].position.y + foot_offset.y,
         foot_step_planner.foot_steps[1].rotation.radian());
     }
 
@@ -353,13 +350,13 @@ void WalkingManager::update_joints()
 
   Kinematics::Foot left_foot;
   left_foot.position.x = left_foot_pose[0][0] + foot_offset.x;
-  left_foot.position.y = left_foot_pose[0][1] + foot_offset.y;
+  left_foot.position.y = left_foot_pose[0][1] - foot_offset.y;
   left_foot.position.z = left_up + foot_offset.z;
   left_foot.yaw = robot_orientation - keisan::make_radian(left_foot_pose[0][2]);
 
   Kinematics::Foot right_foot;
   right_foot.position.x = right_foot_pose[0][0] + foot_offset.x;
-  right_foot.position.y = right_foot_pose[0][1] - foot_offset.y;
+  right_foot.position.y = right_foot_pose[0][1] + foot_offset.y;
   right_foot.position.z = right_up + foot_offset.z;
   right_foot.yaw = robot_orientation - keisan::make_radian(right_foot_pose[0][2]);
 

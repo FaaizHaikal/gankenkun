@@ -63,7 +63,6 @@ void FootStepPlanner::set_config(const nlohmann::json & planner_data)
   if (jitsuyo::assign_val(planner_data, "foot_geometry", foot_geometry_section)) {
     bool valid_section = jitsuyo::assign_val(foot_geometry_section, "foot_width", foot_width);
     valid_section &= jitsuyo::assign_val(foot_geometry_section, "foot_length", foot_length);
-    valid_section &= jitsuyo::assign_val(foot_geometry_section, "feet_spacing", feet_spacing);
 
     if (!valid_section) {
       std::cout << "Error found at section `foot_geometry`" << std::endl;
@@ -198,14 +197,13 @@ void FootStepPlanner::apply_action(
   const std::vector<float> & action)
 {
   double dx = action[0] * action_scale;
-  double dy = action[1] * action_scale + feet_spacing;
+  double dy = action[1] * action_scale;
   double dtheta = action[2] * action_scale;
 
   // Clamp
   dx = keisan::clamp(dx, -max_backward, max_forward);
   dy = keisan::clamp(dy, -max_right, max_left);
   dtheta = keisan::clamp(dtheta, -max_rotation.radian(), max_rotation.radian());
-  // printf("dx: %f, dy: %f, dtheta: %f\n", dx, dy, dtheta);
   bool is_right_support = next_support == RIGHT_FOOT;
 
   // Symmetry (LEFT FOOT)
@@ -225,7 +223,6 @@ void FootStepPlanner::apply_action(
   support_pos.y += wy;
 
   support_yaw += keisan::make_radian(dtheta).normalize();
-  // printf("sup yaw: %f\n", support_yaw.degree());
 }
 
 void FootStepPlanner::plan(
@@ -245,20 +242,19 @@ void FootStepPlanner::plan(
 
   if (
     is_reached_target(target_position, target_orientation, current_position, current_orientation)) {
-    std::cout << "reached target\n";
     foot_steps.push_back({time, current_position, current_orientation, BOTH_FEET});
     time += period;
     foot_steps.push_back({time, current_position, current_orientation, BOTH_FEET});
   } else {
     if (next_support == LEFT_FOOT) {
       foot_steps.push_back(
-        {time, keisan::Point2(current_position.x, current_position.y), current_orientation,
-         LEFT_FOOT});
+        {time, keisan::Point2(current_position.x, current_position.y + feet_spacing),
+         current_orientation, LEFT_FOOT});
       next_support = RIGHT_FOOT;
     } else {
       foot_steps.push_back(
-        {time, keisan::Point2(current_position.x, current_position.y), current_orientation,
-         RIGHT_FOOT});
+        {time, keisan::Point2(current_position.x, current_position.y - feet_spacing),
+         current_orientation, RIGHT_FOOT});
       next_support = LEFT_FOOT;
     }
   }
@@ -282,9 +278,13 @@ void FootStepPlanner::plan(
 
     apply_action(current_position, current_orientation, next_support, action);
 
+    bool is_right_foot = next_support == RIGHT_FOOT;
+    auto next_position = current_position;
+    next_position.y += is_right_foot ? -feet_spacing : feet_spacing;
+
     time += period;
-    foot_steps.push_back({time, current_position, current_orientation, next_support});
-    next_support = (next_support == RIGHT_FOOT ? LEFT_FOOT : RIGHT_FOOT);
+    foot_steps.push_back({time, next_position, current_orientation, next_support});
+    next_support = (is_right_foot ? LEFT_FOOT : RIGHT_FOOT);
   }
 
   // Planning walk in position
@@ -293,12 +293,12 @@ void FootStepPlanner::plan(
 
     if (next_support == LEFT_FOOT) {
       foot_steps.push_back(
-        {time, keisan::Point2(target_position.x, target_position.y), target_orientation,
-         LEFT_FOOT});
-    } else if (next_support == LEFT_FOOT) {
+        {time, keisan::Point2(target_position.x, target_position.y + feet_spacing),
+         target_orientation, LEFT_FOOT});
+    } else if (next_support == RIGHT_FOOT) {
       foot_steps.push_back(
-        {time, keisan::Point2(target_position.x, target_position.y), target_orientation,
-         RIGHT_FOOT});
+        {time, keisan::Point2(target_position.x, target_position.y - feet_spacing),
+         target_orientation, RIGHT_FOOT});
     }
 
     time += period;

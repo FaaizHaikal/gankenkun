@@ -64,7 +64,6 @@ public:
     keisan::Point2 & support_pos, keisan::Angle<double> & support_yaw, int next_support,
     const std::vector<float> & action);
 
-  int switch_support_foot(int support_foot);
   void set_config(const nlohmann::json & planner_data);
   bool is_reached_target(
     const keisan::Point2 & target_position, const keisan::Angle<double> & target_orientation,
@@ -77,6 +76,8 @@ public:
 
   void set_period(double period) { this->period = period; }
   void print_foot_steps();
+
+  double set_feet_spacing(double spacing) { return this->feet_spacing = spacing; }
 
   std::deque<FootStep> foot_steps;
 
