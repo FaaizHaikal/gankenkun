@@ -153,7 +153,7 @@ void FootStepPlanner::print_foot_steps()
 
     std::cout << "Step " << counter++ << "-> Time(" << step.time << "); Position("
               << step.position.x << ", " << step.position.y << "); Rotation("
-              << step.rotation.radian() << "); "
+              << step.rotation.degree() << "); "
               << "Support(\'" << support << "\')\n";
   }
 }
